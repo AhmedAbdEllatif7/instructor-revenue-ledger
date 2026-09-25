@@ -9,20 +9,22 @@
 - [x] Create AGENTS.md
 - [x] Create documentation structure
 - [x] Create initial commit
+- [x] add docs
+- [x] dockerize the project
 
 ## Phase 2 — Requirements Analysis
 
-- [ ] Extract explicit requirements
-- [ ] Identify unspecified business rules
-- [ ] Define subscription rules
-- [ ] Define revenue allocation rules
-- [ ] Define platform share
-- [ ] Define instructor earning rules
-- [ ] Define rounding rules
-- [ ] Define refund rules
-- [ ] Define payout lifecycle
-- [ ] Define provider behavior
-- [ ] Define idempotency strategy
+- [x] Extract explicit requirements
+- [x] Identify unspecified business rules
+- [x] Define subscription rules
+- [x] Define revenue allocation rules
+- [x] Define platform share
+- [x] Define instructor earning rules
+- [x] Define rounding rules
+- [x] Define refund rules
+- [x] Define payout lifecycle
+- [x] Define provider behavior
+- [x] Define idempotency strategy
 
 ## Phase 3 — Domain & Database Design
 
