@@ -6,6 +6,7 @@ use App\Exceptions\UnbalancedLedgerTransactionException;
 use App\Models\LedgerAccount;
 use App\Models\LedgerEntry;
 use App\Models\LedgerTransaction;
+use App\Models\Payout;
 use App\Models\Subscription;
 use App\Models\SubscriptionPayment;
 use App\Models\SubscriptionPeriodAllocation;
@@ -250,5 +251,144 @@ class LedgerService
         $account = LedgerAccount::where('code', $code)->first();
 
         return $account ? $account->currentBalanceCents() : 0;
+    }
+
+    /**
+     * Move payout funds from instructor payable to escrow in-flight account (ADR-006 Phase 1).
+     * Debit: Liabilities:Instructor:Payable (reduces available balance)
+     * Credit: Liabilities:Instructor:PayoutInFlight (freezes funds in escrow)
+     */
+    public function holdPayoutFunds(Payout $payout): LedgerTransaction
+    {
+        $referenceNumber = "PAYOUT_HOLD_{$payout->id}";
+
+        $payableAccount = $this->instructorPayableAccount($payout->instructor_id);
+        $escrowAccount = $this->instructorEscrowAccount($payout->instructor_id);
+
+        $entries = [
+            [
+                'ledger_account_id' => $payableAccount->id,
+                'direction' => LedgerEntry::DIRECTION_DEBIT,
+                'amount_cents' => $payout->amount_cents,
+            ],
+            [
+                'ledger_account_id' => $escrowAccount->id,
+                'direction' => LedgerEntry::DIRECTION_CREDIT,
+                'amount_cents' => $payout->amount_cents,
+            ],
+        ];
+
+        return $this->postTransaction(
+            referenceNumber: $referenceNumber,
+            type: LedgerTransaction::TYPE_PAYOUT_HOLD,
+            description: "Payout #{$payout->id} escrow hold for Instructor #{$payout->instructor_id} Period {$payout->period_key}",
+            periodKey: $payout->period_key,
+            entries: $entries
+        );
+    }
+
+    /**
+     * Complete payout: funds permanently leave the platform gateway (ADR-006 Phase 2).
+     * Debit: Liabilities:Instructor:PayoutInFlight (clears escrow liability)
+     * Credit: Assets:Gateway (reduces cash assets)
+     */
+    public function completePayout(Payout $payout, string $transferId): LedgerTransaction
+    {
+        $referenceNumber = "PAYOUT_COMPLETE_{$payout->id}";
+
+        $escrowAccount = $this->instructorEscrowAccount($payout->instructor_id);
+        $gatewayAccount = $this->gatewayAccount();
+
+        $entries = [
+            [
+                'ledger_account_id' => $escrowAccount->id,
+                'direction' => LedgerEntry::DIRECTION_DEBIT,
+                'amount_cents' => $payout->amount_cents,
+            ],
+            [
+                'ledger_account_id' => $gatewayAccount->id,
+                'direction' => LedgerEntry::DIRECTION_CREDIT,
+                'amount_cents' => $payout->amount_cents,
+            ],
+        ];
+
+        return $this->postTransaction(
+            referenceNumber: $referenceNumber,
+            type: LedgerTransaction::TYPE_PAYOUT_COMPLETED,
+            description: "Payout #{$payout->id} completed with Provider Transfer #{$transferId}",
+            periodKey: $payout->period_key,
+            entries: $entries
+        );
+    }
+
+    /**
+     * Release failed payout funds back from escrow to available instructor payable (ADR-006).
+     * Debit: Liabilities:Instructor:PayoutInFlight (clears escrow)
+     * Credit: Liabilities:Instructor:Payable (restores instructor withdrawable balance)
+     */
+    public function releasePayoutHold(Payout $payout, string $reason): LedgerTransaction
+    {
+        $referenceNumber = "PAYOUT_RELEASE_{$payout->id}";
+
+        $escrowAccount = $this->instructorEscrowAccount($payout->instructor_id);
+        $payableAccount = $this->instructorPayableAccount($payout->instructor_id);
+
+        $entries = [
+            [
+                'ledger_account_id' => $escrowAccount->id,
+                'direction' => LedgerEntry::DIRECTION_DEBIT,
+                'amount_cents' => $payout->amount_cents,
+            ],
+            [
+                'ledger_account_id' => $payableAccount->id,
+                'direction' => LedgerEntry::DIRECTION_CREDIT,
+                'amount_cents' => $payout->amount_cents,
+            ],
+        ];
+
+        return $this->postTransaction(
+            referenceNumber: $referenceNumber,
+            type: LedgerTransaction::TYPE_PAYOUT_FAILED_RELEASE,
+            description: "Payout #{$payout->id} failed: {$reason}. Funds released back to instructor balance.",
+            periodKey: $payout->period_key,
+            entries: $entries
+        );
+    }
+
+    /**
+     * Record a subscription refund in the double-entry ledger (ADR-003 & ADR-008).
+     *
+     * Only the unrecognized (still-deferred) portion is refunded.
+     * Already-recognized months remain with instructors — no clawbacks.
+     *
+     * Debit:  Liabilities:DeferredRevenue  (removes the unearned liability)
+     * Credit: Assets:Gateway               (cash flows out back to the student)
+     */
+    public function recordRefund(Subscription $subscription, int $refundAmountCents): LedgerTransaction
+    {
+        $referenceNumber = "REFUND_SUB_{$subscription->id}";
+
+        $entries = [
+            // Debit Deferred Revenue: unearned liability is cleared
+            [
+                'ledger_account_id' => $this->deferredRevenueAccount()->id,
+                'direction' => LedgerEntry::DIRECTION_DEBIT,
+                'amount_cents' => $refundAmountCents,
+            ],
+            // Credit Gateway: cash exits the platform to the student
+            [
+                'ledger_account_id' => $this->gatewayAccount()->id,
+                'direction' => LedgerEntry::DIRECTION_CREDIT,
+                'amount_cents' => $refundAmountCents,
+            ],
+        ];
+
+        return $this->postTransaction(
+            referenceNumber: $referenceNumber,
+            type: LedgerTransaction::TYPE_REFUND,
+            description: "Subscription #{$subscription->id} refund — {$refundAmountCents} cents returned to student #{$subscription->student_id}. Recognized months retained by instructors.",
+            periodKey: null,
+            entries: $entries
+        );
     }
 }

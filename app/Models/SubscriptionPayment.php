@@ -21,6 +21,7 @@ class SubscriptionPayment extends Model
         'external_reference',
         'status',
         'paid_at',
+        'refunded_at',
     ];
 
     protected function casts(): array
@@ -28,6 +29,7 @@ class SubscriptionPayment extends Model
         return [
             'amount_cents' => 'integer',
             'paid_at' => 'datetime',
+            'refunded_at' => 'datetime',
         ];
     }
 
@@ -36,3 +38,4 @@ class SubscriptionPayment extends Model
         return $this->belongsTo(Subscription::class, 'subscription_id');
     }
 }
+

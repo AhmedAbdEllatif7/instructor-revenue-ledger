@@ -50,29 +50,29 @@
 
 ## Phase 6 — Payout System
 
-- [ ] Implement payout model
-- [ ] Implement payout state transitions
-- [ ] Implement payout command
-- [ ] Implement payout jobs
-- [ ] Implement idempotency
-- [ ] Handle concurrency
-- [ ] Handle retries
+- [x] Implement payout model
+- [x] Implement payout state transitions
+- [x] Implement payout command
+- [x] Implement payout jobs
+- [x] Implement idempotency
+- [x] Handle concurrency
+- [x] Handle retries
 
 ## Phase 7 — Mock Payment Provider
 
-- [ ] Provider interface
-- [ ] Successful payment
-- [ ] Permanent failure
-- [ ] Timeout after success
-- [ ] Status lookup
-- [ ] Tests
+- [x] Provider interface
+- [x] Successful payment
+- [x] Permanent failure
+- [x] Timeout after success
+- [x] Status lookup
+- [x] Tests
 
 ## Phase 8 — Refunds
 
-- [ ] Define refund policy
-- [ ] Implement refund handling
-- [ ] Handle already-paid instructor earnings
-- [ ] Add tests
+- [x] Define refund policy
+- [x] Implement refund handling
+- [x] Handle already-paid instructor earnings
+- [x] Add tests
 
 ## Phase 9 — Filament
 

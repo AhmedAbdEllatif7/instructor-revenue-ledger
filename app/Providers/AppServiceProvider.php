@@ -11,7 +11,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(
+            \App\Contracts\PayoutProviderInterface::class,
+            \App\Services\Payout\MockPayoutProvider::class
+        );
     }
 
     /**
