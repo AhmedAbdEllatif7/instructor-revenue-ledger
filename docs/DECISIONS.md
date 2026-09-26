@@ -222,3 +222,65 @@ External payment APIs are unreliable: a request may succeed on the provider's si
 ### Reason
 - Eliminates the risk of duplicate payments caused by network timeouts.
 - Completely satisfies the challenge requirement regarding unreliable provider responses.
+
+---
+
+## ADR-008: Mid-Term Subscription Refunds & Zero Instructor Clawbacks
+
+### Status
+Accepted
+
+### Problem
+When a customer purchases a multi-month or annual subscription upfront, instructors are credited on a monthly accrual basis based on actual student consumption during each elapsed month. If the student requests a refund mid-term (e.g. Month 3 of an Annual subscription), how should the refund amount be calculated, and should instructors who already earned revenue in Months 1 and 2 be subjected to clawbacks?
+
+### Options Considered
+1. **Full Refund with Instructor Clawbacks:** Refund 100% of the original subscription payment to the student and claw back the historical earnings from instructors' accounts. (Rejected: Unfair to instructors who delivered content; results in negative instructor balances if funds were already withdrawn).
+2. **Pro-rated Refund without Clawbacks (Unearned Deferred Revenue Return):**
+   - Calculate consumed/recognized value to date.
+   - Refund only the remaining unearned balance still held in `Customer Deferred Revenue`.
+   - Never claw back or debit historical instructor earnings for past services rendered.
+3. **No Refunds:** Strict no-refund policy. (Rejected: Violates typical consumer subscription expectations).
+
+### Chosen Approach
+**Option 2: Pro-rated Refund without Clawbacks.**
+- The refundable amount is strictly:
+  $$\text{Refundable Amount} = \text{Total Paid Cents} - \sum \text{Recognized Period Amounts Cents}$$
+- If all months have already elapsed and been recognized, the refundable balance is 0.
+- Double-entry ledger movement:
+  - **Debit:** `Liabilities:Customer:DeferredRevenue` (extinguishes the unearned liability).
+  - **Credit:** `Assets:Cash:PaymentGateway` (cash departs platform back to student).
+- Instructor accounts (`Liabilities:Instructor:Payable`) are untouched.
+- Subscription status is set to `refunded` with `canceled_at = now()`, preventing any future recognition tranches.
+
+### Reason
+- Respects GAAP/IFRS matching principles: revenue and expense for past periods are matched and settled.
+- Protects instructors from unexpected debt/negative balances.
+- Mathematically balanced and auditable in the double-entry ledger.
+
+---
+
+## ADR-009: Read-Only Administrative Interface via Filament 3
+
+### Status
+Accepted
+
+### Problem
+Platform administrators need visibility into instructor balances, lifetime earnings, and the complete audit trail of payouts and reconciliation states. However, financial records must never be modified or deleted arbitrarily through UI forms.
+
+### Options Considered
+1. **Full CRUD Filament Panel:** Generate standard Filament resources with create, edit, and delete actions. (Rejected: Dangerous in a financial core; risk of manual data tampering violating double-entry invariants).
+2. **Custom Blade / Controller Dashboard:** Build custom read-only views from scratch. (More maintenance overhead; reinventing table filters, search, and pagination).
+3. **Strictly Read-Only Filament 3 Panel:** Leverage Filament 3 tables, badges, filters, and infolists while strictly stripping all mutation routes (`create`, `edit`, `delete`) at both policy and route definition levels.
+
+### Chosen Approach
+**Option 3: Strictly Read-Only Filament 3 Panel.**
+- Configured dedicated resources:
+  - `InstructorResource` (`/admin/instructor-balances`): Displays instructors with computed withdrawable balances, lifetime platform earnings, and in-flight escrow.
+  - `PayoutResource` (`/admin/payouts`): Displays complete payout history, status badges, idempotency keys, and provider transfer references.
+  - `LedgerStatsOverview`: Live dashboard widget reflecting deferred revenue, instructor payables, platform commission, breakage, and disbursed payouts.
+- Mutation routes (`create`, `edit`, `delete`) return HTTP 404. All resource capabilities are disabled (`canCreate() => false`, etc.).
+
+### Reason
+- Delivers a polished, secure administrative experience with zero risk of manual financial ledger tampering.
+- Native Livewire/Filament integration offers fast filtering, search, and responsive layout.
+

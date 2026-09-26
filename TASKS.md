@@ -76,26 +76,26 @@
 
 ## Phase 9 — Filament
 
-- [ ] Instructor balance screen
-- [ ] Payout history screen
+- [x] Instructor balance screen
+- [x] Payout history screen
 
 ## Phase 10 — Documentation
 
-- [ ] README
-- [ ] ARCHITECTURE.md
-- [ ] DECISIONS.md
-- [ ] AI_USAGE.md
+- [x] README
+- [x] ARCHITECTURE.md
+- [x] DECISIONS.md
+- [x] AI_USAGE.md
 
 ## Phase 11 — Final Testing
 
-- [ ] Full test suite
-- [ ] Duplicate payout scenario
-- [ ] Duplicate job scenario
-- [ ] Worker retry scenario
-- [ ] Provider timeout scenario
-- [ ] Delayed confirmation scenario
-- [ ] Refund scenario
-- [ ] Rounding scenario
+- [x] Full test suite
+- [x] Duplicate payout scenario
+- [x] Duplicate job scenario
+- [x] Worker retry scenario
+- [x] Provider timeout scenario
+- [x] Delayed confirmation scenario
+- [x] Refund scenario
+- [x] Rounding scenario
 
 ## Phase 12 — Submission
 

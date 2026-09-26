@@ -105,3 +105,105 @@ Financial correctness is enforced by hard database constraints to prevent race c
    - `payouts.idempotency_key` is unique.
 4. **Zero Floating-Point Drift (ADR-001)**:
    - All financial amounts are stored as `BIGINT UNSIGNED` in minor currency units (cents/piastres).
+
+---
+
+## 5. Payout State Machine & Two-Phase Escrow Hold
+
+To prevent duplicate payouts under race conditions, worker crashes, or external timeouts, the payout lifecycle operates as an atomic finite state machine:
+
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFT: Command Identifies Balance > 0
+    DRAFT --> PROCESSING: Lock row (SELECT FOR UPDATE) + Two-Phase Hold
+    
+    PROCESSING --> COMPLETED: Provider Success
+    PROCESSING --> FAILED: Provider Permanent Failure (Hold Released)
+    PROCESSING --> PENDING_RECONCILIATION: Provider Timeout (Hold Preserved)
+    
+    PENDING_RECONCILIATION --> COMPLETED: Reconcile Command queries Provider -> SUCCESS
+    PENDING_RECONCILIATION --> FAILED: Reconcile Command queries Provider -> NOT_FOUND (Hold Released)
+    
+    COMPLETED --> [*]
+    FAILED --> [*]
+```
+
+### The Two-Phase Escrow Hold:
+1. **Phase 1 (Debit Hold):** When a payout transitions to `processing`, a double-entry ledger transaction debits `Liabilities:Instructor:Payable` and credits `Liabilities:Instructor:PayoutInFlight`. This instantly reduces the instructor's withdrawable balance before any network call.
+2. **Phase 2 (Settlement or Release):**
+   - **On Success:** Funds move from `Liabilities:Instructor:PayoutInFlight` (debit) to `Assets:Gateway` (credit).
+   - **On Permanent Failure:** Funds move from `Liabilities:Instructor:PayoutInFlight` (debit) back to `Liabilities:Instructor:Payable` (credit), restoring the instructor's balance.
+   - **On Timeout:** Funds remain locked in `PayoutInFlight` until the `payout:reconcile` command checks provider status. Money is never released prematurely.
+
+---
+
+## 6. Mock Payment Provider Architecture
+
+The external payment gateway abstraction is implemented via `PayoutProviderInterface`:
+
+```php
+interface PayoutProviderInterface
+{
+    public function payout(Payout $payout, string $idempotencyKey): PayoutResponse;
+    public function checkStatus(string $idempotencyKey): PayoutResponse;
+}
+```
+
+The `MockPayoutProvider` simulates 4 distinct real-world gateway scenarios:
+1. **Mode `SUCCESS`:** Generates an external provider transfer reference (`TRF-XXXX`) and returns `STATUS_SUCCESS`.
+2. **Mode `PERMANENT_FAILURE`:** Returns `STATUS_FAILED` with an explicit diagnostic reason (e.g., invalid bank details).
+3. **Mode `TIMEOUT_AFTER_SUCCESS`:** Moves money internally at the gateway and records the successful transfer, but deliberately drops the HTTP connection and throws `PayoutProviderTimeoutException`. When `checkStatus()` is subsequently invoked with the original `idempotency_key`, the provider successfully returns the recorded transfer reference.
+4. **Status Check:** Resolves unknown transfer states idempotently via cached transfer logs.
+
+---
+
+## 7. Mid-Term Refund Architecture (ADR-008)
+
+The `RefundService` handles mid-term subscription cancellations with zero instructor clawbacks:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Student
+    participant Controller as Application / API
+    participant Refund as RefundService
+    participant Ledger as LedgerService
+    participant DB as Database (Double-Entry)
+
+    Student->>Controller: Request Subscription Refund
+    Controller->>Refund: processRefund(Subscription)
+    Refund->>Refund: Calculate Refundable Amount = Paid - sum(Recognized Period Tranches)
+    alt Refundable Amount > 0
+        Refund->>Ledger: recordRefund(Subscription, amount)
+        Ledger->>DB: Debit Liabilities:DeferredRevenue
+        Ledger->>DB: Credit Assets:Gateway
+        Refund->>DB: Mark Subscription as 'refunded' (canceled_at = now)
+        Refund->>DB: Mark Payment as 'refunded' (refunded_at = now)
+    else All Periods Recognized
+        Refund-->>Controller: Refund amount is 0 (Subscription expired/exhausted)
+    end
+```
+
+### Invariants Preserved:
+- Instructors retain 100% of earnings allocated for elapsed months where content was delivered.
+- Students receive unearned deferred revenue.
+- Platform balance sheet remains in strict equilibrium.
+
+---
+
+## 8. Administrative Surface (Filament 3)
+
+The administration interface is built using **Filament 3** and strictly scoped as a **Read-Only Inspection Surface**:
+
+1. **Instructor Balances (`/admin/instructor-balances`):**
+   - Filtered exclusively to `role = 'instructor'`.
+   - Real-time ledger balance computation (`Withdrawable Balance`, `Lifetime Earnings`, `In-Flight Escrow`).
+   - Detailed Infolist view with personal and financial ledger audit trails.
+2. **Payout History (`/admin/payouts`):**
+   - Complete record of all payouts with status badges, period keys, provider references, and failure reasons.
+   - Diagnostic infolist view for reconciliation inspection.
+3. **Ledger Stats Overview Widget:**
+   - Real-time platform balance sheet health on the dashboard (Deferred Revenue, Instructor Payables, Commission, Disbursed Payouts, Escrow, Breakage).
+4. **Security & Immutability:**
+   - All mutation endpoints (`create`, `edit`, `delete`) are disabled and return HTTP 404, preventing unauthorized manual manipulation of financial data.
+
