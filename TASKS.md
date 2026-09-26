@@ -28,11 +28,11 @@
 
 ## Phase 3 — Domain & Database Design
 
-- [ ] Define domain entities
-- [ ] Define relationships
-- [ ] Define database constraints
-- [ ] Define indexes
-- [ ] Review schema for large-scale data
+- [x] Define domain entities
+- [x] Define relationships
+- [x] Define database constraints
+- [x] Define indexes
+- [x] Review schema for large-scale data
 
 ## Phase 4 — Revenue Allocation
 
