@@ -36,17 +36,17 @@
 
 ## Phase 4 — Revenue Allocation
 
-- [ ] Implement allocation logic
-- [ ] Add allocation tests
-- [ ] Handle rounding
-- [ ] Document allocation strategy
+- [x] Implement allocation logic
+- [x] Add allocation tests
+- [x] Handle rounding
+- [x] Document allocation strategy
 
 ## Phase 5 — Ledger & Balances
 
-- [ ] Implement instructor earnings
-- [ ] Implement balance calculation
-- [ ] Add financial invariants
-- [ ] Add tests
+- [x] Implement instructor earnings
+- [x] Implement balance calculation
+- [x] Add financial invariants
+- [x] Add tests
 
 ## Phase 6 — Payout System
 
